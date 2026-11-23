@@ -1,0 +1,2369 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+  <title>Simulador de Consola Teatral | Ensayos de Iluminación</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=JetBrains+Mono:wght@400;500;700&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  
+  <style>
+    /* ==========================================================================
+       RESET Y VARIABLES GLOBALES
+       ========================================================================== */
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+
+    :root {
+      /* Paleta de la consola */
+      --bg-dark: #070709;
+      --bg-surface: #101116;
+      --border-subtle: rgba(255, 255, 255, 0.08);
+      --border-highlight: rgba(255, 255, 255, 0.18);
+      --text-muted: #848895;
+      --text-main: #f0f2f5;
+
+      /* Estado de luminarias */
+      --color-blackout: #ef4444;
+      --color-full-on: #eab308;
+      --color-active-led: #22c55e;
+      --color-standby-led: #3b4252;
+
+      /* Temperatura de color de la luz teatral (predeterminado: Cálido 3200K) */
+      --beam-color-core: rgba(255, 248, 225, 0.85);
+      --beam-color-mid: rgba(255, 214, 153, 0.38);
+      --beam-color-outer: rgba(245, 158, 11, 0.08);
+      --beam-color-ambient: rgba(251, 191, 36, 0.18);
+      --lens-glow: #fff1c2;
+      --lens-ring: #f59e0b;
+
+      /* Timings de transición estrictos requeridos */
+      --transition-fade-in: 0.5s ease-out;
+      --transition-fade-out: 1.0s ease-in-out;
+    }
+
+    /* Temperaturas de color seleccionables */
+    body[data-gel="warm"] {
+      --beam-color-core: rgba(255, 246, 220, 0.88);
+      --beam-color-mid: rgba(255, 205, 130, 0.42);
+      --beam-color-outer: rgba(235, 135, 25, 0.10);
+      --beam-color-ambient: rgba(245, 158, 11, 0.22);
+      --lens-glow: #ffeacc;
+      --lens-ring: #f59e0b;
+    }
+
+    body[data-gel="neutral"] {
+      --beam-color-core: rgba(255, 255, 255, 0.92);
+      --beam-color-mid: rgba(230, 240, 255, 0.35);
+      --beam-color-outer: rgba(186, 215, 255, 0.08);
+      --beam-color-ambient: rgba(200, 225, 255, 0.16);
+      --lens-glow: #ffffff;
+      --lens-ring: #93c5fd;
+    }
+
+    body[data-gel="amber"] {
+      --beam-color-core: rgba(255, 230, 180, 0.9);
+      --beam-color-mid: rgba(255, 140, 40, 0.45);
+      --beam-color-outer: rgba(220, 60, 10, 0.12);
+      --beam-color-ambient: rgba(249, 115, 22, 0.25);
+      --lens-glow: #ffedd5;
+      --lens-ring: #ea580c;
+    }
+
+    body[data-gel="blue"] {
+      --beam-color-core: rgba(230, 245, 255, 0.9);
+      --beam-color-mid: rgba(96, 165, 250, 0.45);
+      --beam-color-outer: rgba(30, 64, 175, 0.15);
+      --beam-color-ambient: rgba(59, 130, 246, 0.25);
+      --lens-glow: #e0f2fe;
+      --lens-ring: #2563eb;
+    }
+
+    html, body {
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background-color: var(--bg-dark);
+      font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+      color: var(--text-main);
+      position: relative;
+    }
+
+    /* ==========================================================================
+       ESCENARIO PRINCIPAL (100vh x 100vw, SIN SCROLL)
+       ========================================================================== */
+    .theater-stage {
+      position: absolute;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+      background: radial-gradient(circle at 50% 30%, #15161c 0%, #090a0d 65%, #040405 100%);
+      display: flex;
+    }
+
+    /* Textura de telón de fondo / ciclorama teatral */
+    .stage-backdrop {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      opacity: 0.75;
+      background: 
+        repeating-linear-gradient(
+          90deg,
+          rgba(0, 0, 0, 0.28) 0px,
+          rgba(0, 0, 0, 0.28) 2px,
+          transparent 2px,
+          transparent 48px,
+          rgba(255, 255, 255, 0.015) 50px,
+          transparent 52px,
+          rgba(0, 0, 0, 0.2) 80px
+        );
+      box-shadow: inset 0 0 160px rgba(0, 0, 0, 0.95);
+      z-index: 1;
+    }
+
+    /* Traspunte superior: Vara / Catwalk teatral donde cuelgan los focos */
+    .grid-rigging-bar {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 64px;
+      background: linear-gradient(180deg, #0b0c10 0%, #191b22 45%, #0d0e13 85%, #050507 100%);
+      border-bottom: 2px solid #232630;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8);
+      z-index: 20;
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      pointer-events: none;
+    }
+
+    .rigging-truss-pattern {
+      position: absolute;
+      inset: 0;
+      background: repeating-linear-gradient(
+        45deg,
+        rgba(255, 255, 255, 0.02) 0,
+        rgba(255, 255, 255, 0.02) 10px,
+        transparent 10px,
+        transparent 20px
+      );
+      opacity: 0.6;
+    }
+
+    /* Suelo del escenario en perspectiva 3D */
+    .stage-floor-wrapper {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 38vh;
+      perspective: 800px;
+      perspective-origin: 50% 0%;
+      overflow: hidden;
+      pointer-events: none;
+      z-index: 3;
+    }
+
+    .stage-floor {
+      position: absolute;
+      inset: -20% -10% 0 -10%;
+      transform: rotateX(65deg);
+      transform-origin: 50% 100%;
+      background: 
+        /* Tablones de madera oscuros de teatro */
+        linear-gradient(90deg, 
+          rgba(0,0,0,0.5) 0%, transparent 1%, transparent 99%, rgba(0,0,0,0.5) 100%),
+        repeating-linear-gradient(
+          90deg,
+          #0e1014 0px,
+          #0e1014 50px,
+          #14171d 51px,
+          #181a22 100px,
+          #0c0d12 101px
+        );
+      border-top: 2px solid rgba(255, 255, 255, 0.08);
+      box-shadow: inset 0 40px 100px rgba(0, 0, 0, 0.95);
+    }
+
+    /* Borde frontal del proscenio (embocadura) */
+    .stage-apron {
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      width: 100%;
+      height: 18px;
+      background: linear-gradient(180deg, #1c1e26 0%, #08080a 100%);
+      border-top: 1px solid rgba(255, 255, 255, 0.06);
+      z-index: 15;
+      pointer-events: none;
+    }
+
+    /* Partículas de polvo en suspensión ambiental */
+    #dust-canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
+      z-index: 8;
+    }
+
+    /* ==========================================================================
+       LAS 3 COLUMNAS DEL ESCENARIO
+       ========================================================================== */
+    .columns-container {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      z-index: 10;
+    }
+
+    .stage-column {
+      position: relative;
+      flex: 1;
+      height: 100%;
+      cursor: pointer;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: background-color 0.25s ease;
+      outline: none;
+    }
+
+    .stage-column:hover {
+      background-color: rgba(255, 255, 255, 0.012);
+    }
+
+    /* Líneas divisorias sutiles entre zonas */
+    .stage-column:not(:last-child)::after {
+      content: "";
+      position: absolute;
+      top: 64px;
+      right: 0;
+      bottom: 18px;
+      width: 1px;
+      background: linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.12) 0%,
+        rgba(255, 255, 255, 0.04) 50%,
+        rgba(255, 255, 255, 0.08) 100%
+      );
+      pointer-events: none;
+      z-index: 12;
+    }
+
+    /* Guía visual / Etiqueta de la zona en el piso */
+    .column-zone-tag {
+      position: absolute;
+      bottom: 24px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 2.5px;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.25);
+      background: rgba(0, 0, 0, 0.5);
+      padding: 4px 12px;
+      border-radius: 4px;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      pointer-events: none;
+      z-index: 16;
+      transition: color 0.3s ease, border-color 0.3s ease;
+    }
+
+    .stage-column:hover .column-zone-tag {
+      color: rgba(255, 255, 255, 0.6);
+      border-color: rgba(255, 255, 255, 0.15);
+    }
+
+    .stage-column.is-on .column-zone-tag {
+      color: var(--lens-glow);
+      border-color: rgba(255, 255, 255, 0.3);
+      text-shadow: 0 0 10px var(--beam-color-mid);
+    }
+
+    /* Indicador de clic interactivo */
+    .column-click-hint {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      letter-spacing: 1.5px;
+      text-transform: uppercase;
+      color: rgba(255, 255, 255, 0.2);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.25s ease, transform 0.25s ease;
+      background: rgba(10, 12, 16, 0.7);
+      backdrop-filter: blur(4px);
+      padding: 6px 14px;
+      border-radius: 20px;
+      border: 1px dashed rgba(255, 255, 255, 0.15);
+      z-index: 14;
+    }
+
+    .stage-column:hover .column-click-hint {
+      opacity: 0.8;
+      transform: translateY(-50%) scale(1.02);
+    }
+
+    /* ==========================================================================
+       FOCO TEATRAL (REFLECTOR CENITAL)
+       ========================================================================== */
+    .spotlight-fixture {
+      position: absolute;
+      top: 48px;
+      width: 140px;
+      height: 110px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      z-index: 25;
+      pointer-events: none;
+    }
+
+    /* Clamp / Abrazadera a la vara */
+    .fixture-clamp {
+      width: 18px;
+      height: 16px;
+      background: #333742;
+      border: 1px solid #1a1b20;
+      border-radius: 3px 3px 0 0;
+    }
+
+    /* Horquilla / Yoke del proyector */
+    .fixture-yoke {
+      width: 58px;
+      height: 24px;
+      border-left: 5px solid #282a33;
+      border-right: 5px solid #282a33;
+      border-top: 5px solid #282a33;
+      border-radius: 8px 8px 0 0;
+    }
+
+    /* Carcasa del foco (cuerpo metálico) */
+    .fixture-housing {
+      width: 82px;
+      height: 58px;
+      background: linear-gradient(180deg, #1f2128 0%, #111216 70%, #0a0a0d 100%);
+      border-radius: 10px 10px 16px 16px;
+      border: 1px solid #323644;
+      box-shadow: 0 8px 20px rgba(0, 0, 0, 0.8), inset 0 2px 4px rgba(255, 255, 255, 0.1);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      position: relative;
+    }
+
+    /* Aletas de refrigeración del cañón */
+    .fixture-fins {
+      width: 72%;
+      height: 18px;
+      margin-top: 4px;
+      background: repeating-linear-gradient(
+        180deg,
+        #2a2c36 0px,
+        #2a2c36 2px,
+        #121317 2px,
+        #121317 5px
+      );
+      border-radius: 4px;
+    }
+
+    /* Viseras cortadoras (Barndoors) */
+    .fixture-snout {
+      position: absolute;
+      bottom: -6px;
+      width: 68px;
+      height: 12px;
+      background: #0d0e12;
+      border: 1px solid #272a34;
+      border-radius: 3px;
+    }
+
+    /* Lente de Fresnel / Apertura emisora */
+    .fixture-lens {
+      position: absolute;
+      bottom: -10px;
+      width: 54px;
+      height: 14px;
+      border-radius: 50%;
+      background: radial-gradient(ellipse at center, #232733 0%, #0c0d12 80%);
+      border: 1px solid #3b4050;
+      box-shadow: 0 0 4px rgba(0,0,0,0.8);
+      overflow: visible;
+    }
+
+    /* Resplandor intrínseco de la bombilla en el lente */
+    .fixture-lens-glow {
+      position: absolute;
+      inset: -4px;
+      border-radius: 50%;
+      background: radial-gradient(ellipse at center, #ffffff 0%, var(--lens-glow) 50%, transparent 85%);
+      box-shadow: 
+        0 0 20px var(--lens-glow),
+        0 0 50px var(--beam-color-mid);
+      pointer-events: none;
+    }
+
+    /* ==========================================================================
+       HAZ DE LUZ CÓNICO (VOLUMETRIC SPOTLIGHT BEAM)
+       ========================================================================== */
+    .beam-container {
+      position: absolute;
+      top: 145px;
+      bottom: 0;
+      width: 100%;
+      pointer-events: none;
+      z-index: 6;
+      overflow: hidden;
+    }
+
+    /* Haz de luz cónico con clip-path trapezoidal */
+    .channel-beam {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 90%;
+      height: 100%;
+      clip-path: polygon(44% 0%, 56% 0%, 100% 100%, 0% 100%);
+      background: linear-gradient(
+        180deg,
+        var(--beam-color-core) 0%,
+        var(--beam-color-mid) 28%,
+        var(--beam-color-outer) 75%,
+        transparent 100%
+      );
+      filter: blur(14px);
+      mix-blend-mode: screen;
+      pointer-events: none;
+    }
+
+    /* Núcleo de alta intensidad en el centro del haz */
+    .channel-beam-core {
+      position: absolute;
+      top: 0;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 60%;
+      height: 95%;
+      clip-path: polygon(46% 0%, 54% 0%, 88% 100%, 12% 100%);
+      background: linear-gradient(
+        180deg,
+        rgba(255, 255, 255, 0.95) 0%,
+        var(--beam-color-core) 15%,
+        var(--beam-color-mid) 50%,
+        transparent 95%
+      );
+      filter: blur(8px);
+      mix-blend-mode: screen;
+      pointer-events: none;
+    }
+
+    /* Resplandor del área de la columna (ambiente) */
+    .channel-ambient-wash {
+      position: absolute;
+      inset: 0;
+      background: radial-gradient(
+        ellipse at 50% 55%,
+        var(--beam-color-ambient) 0%,
+        rgba(0, 0, 0, 0) 70%
+      );
+      mix-blend-mode: screen;
+      pointer-events: none;
+    }
+
+    /* Punto focal de luz en el suelo (Pool de luz elíptico en el piso) */
+    .channel-floor-pool {
+      position: absolute;
+      bottom: 25px;
+      left: 50%;
+      transform: translateX(-50%) rotateX(60deg);
+      width: 82%;
+      height: 140px;
+      border-radius: 50%;
+      background: radial-gradient(
+        ellipse at center,
+        var(--beam-color-core) 0%,
+        var(--beam-color-mid) 35%,
+        var(--beam-color-ambient) 65%,
+        transparent 80%
+      );
+      filter: blur(12px);
+      mix-blend-mode: screen;
+      pointer-events: none;
+      z-index: 11;
+    }
+
+    /* Destello caliente (Hotspot) en el suelo */
+    .channel-floor-hotspot {
+      position: absolute;
+      bottom: 45px;
+      left: 50%;
+      transform: translateX(-50%) rotateX(60deg);
+      width: 45%;
+      height: 70px;
+      border-radius: 50%;
+      background: radial-gradient(
+        ellipse at center,
+        #ffffff 0%,
+        var(--beam-color-core) 40%,
+        transparent 75%
+      );
+      filter: blur(8px);
+      mix-blend-mode: screen;
+      pointer-events: none;
+      z-index: 12;
+    }
+
+    /* ==========================================================================
+       GESTIÓN ASIMÉTRICA DE TRANSICIONES (REQUISITO CRUCIAL)
+       Encendido: 500 ms (0.5s ease-out)
+       Apagado:  1000 ms (1.0s ease-in-out)
+       ========================================================================== */
+
+    /* ESTADO BASE / APAGADO (OFF): 
+       Cuando el elemento pierde .is-on y regresa al estado apagado,
+       debe usar estrictamente 1000ms (1.0s) ease-in-out */
+    .fixture-lens-glow,
+    .channel-beam,
+    .channel-beam-core,
+    .channel-ambient-wash,
+    .channel-floor-pool,
+    .channel-floor-hotspot,
+    .stage-spike-cross {
+      opacity: 0;
+      transition: opacity var(--transition-fade-out), filter var(--transition-fade-out);
+    }
+
+    /* ESTADO ENCENDIDO (ON):
+       Cuando se activa la clase .is-on, debe usar estrictamente 500ms (0.5s) ease-out */
+    .stage-column.is-on .fixture-lens-glow {
+      opacity: 1;
+      transition: opacity var(--transition-fade-in), filter var(--transition-fade-in);
+    }
+
+    .stage-column.is-on .channel-beam {
+      opacity: 0.85;
+      transition: opacity var(--transition-fade-in), filter var(--transition-fade-in);
+    }
+
+    .stage-column.is-on .channel-beam-core {
+      opacity: 0.95;
+      transition: opacity var(--transition-fade-in), filter var(--transition-fade-in);
+    }
+
+    .stage-column.is-on .channel-ambient-wash {
+      opacity: 1;
+      transition: opacity var(--transition-fade-in), filter var(--transition-fade-in);
+    }
+
+    .stage-column.is-on .channel-floor-pool {
+      opacity: 1;
+      transition: opacity var(--transition-fade-in), filter var(--transition-fade-in);
+    }
+
+    .stage-column.is-on .channel-floor-hotspot {
+      opacity: 0.9;
+      transition: opacity var(--transition-fade-in), filter var(--transition-fade-in);
+    }
+
+    .stage-column.is-on .stage-spike-cross {
+      opacity: 0.85;
+      transition: opacity var(--transition-fade-in), filter var(--transition-fade-in);
+    }
+
+    /* Marca de cinta en el escenario (Spike Tape) */
+    .stage-spike-cross {
+      position: absolute;
+      bottom: 74px;
+      left: 50%;
+      transform: translateX(-50%) rotateX(60deg);
+      width: 24px;
+      height: 24px;
+      pointer-events: none;
+      z-index: 13;
+    }
+    .stage-spike-cross::before,
+    .stage-spike-cross::after {
+      content: "";
+      position: absolute;
+      background: rgba(255, 255, 255, 0.4);
+      box-shadow: 0 0 6px var(--beam-color-mid);
+    }
+    .stage-spike-cross::before {
+      top: 10px;
+      left: 3px;
+      width: 18px;
+      height: 4px;
+    }
+    .stage-spike-cross::after {
+      top: 3px;
+      left: 10px;
+      width: 4px;
+      height: 18px;
+    }
+
+    /* ==========================================================================
+       ESCENOGRAFÍA Y PERSONAJES (ILUMINACIÓN REACTIVA ASIMÉTRICA)
+       ========================================================================== */
+    .stage-scenery-group {
+      position: absolute;
+      bottom: 52px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 92%;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      pointer-events: none;
+      z-index: 14;
+    }
+
+    .scenery-col1 {
+      max-width: 440px;
+      gap: 8px;
+    }
+
+    .scenery-col2 {
+      max-width: 220px;
+      bottom: 60px;
+    }
+
+    .scenery-col3 {
+      max-width: 380px;
+      bottom: 50px;
+    }
+
+    /* Estado de luz APAGADO (Fade out 1.0s ease-in-out hacia penumbra):
+       Los personajes y escenografía permanecen en escena como siluetas oscuras teatrales */
+    .stage-element {
+      filter: brightness(0.12) contrast(1.15) drop-shadow(0 2px 6px rgba(0, 0, 0, 0.95));
+      opacity: 0.38;
+      transition: filter var(--transition-fade-out), opacity var(--transition-fade-out);
+      will-change: filter, opacity;
+      pointer-events: none;
+    }
+
+    /* Estado de luz ENCENDIDO (Fade in 500ms / 0.5s ease-out):
+       Se iluminan cálidamente con resplandor escénico */
+    .stage-column.is-on .stage-element {
+      filter: brightness(1.05) contrast(1.02) drop-shadow(0 4px 18px var(--beam-color-ambient));
+      opacity: 1;
+      transition: filter var(--transition-fade-in), opacity var(--transition-fade-in);
+    }
+
+    /* Personajes interactivos con entrada y salida escénica (0.35s ease) */
+    .stage-character {
+      position: relative;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      transition: opacity 0.35s ease, transform 0.35s ease;
+      opacity: 1;
+      transform: translateY(0);
+      pointer-events: none;
+    }
+
+    .stage-character.is-exited {
+      opacity: 0;
+      transform: translateY(12px) scale(0.95);
+      pointer-events: none;
+    }
+
+    .character-inner {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      pointer-events: none;
+    }
+
+    /* Etiquetas de personajes y escenografía */
+    .character-tag {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+      color: rgba(255, 255, 255, 0.45);
+      background: rgba(10, 12, 16, 0.85);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 4px;
+      padding: 2px 6px;
+      margin-top: 4px;
+      white-space: nowrap;
+      text-transform: uppercase;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.8);
+      pointer-events: none;
+      transition: color var(--transition-fade-out), border-color var(--transition-fade-out), text-shadow var(--transition-fade-out);
+    }
+
+    .stage-column.is-on .character-tag {
+      color: var(--lens-glow);
+      border-color: rgba(255, 255, 255, 0.25);
+      text-shadow: 0 0 8px var(--beam-color-mid);
+      transition: color var(--transition-fade-in), border-color var(--transition-fade-in), text-shadow var(--transition-fade-in);
+    }
+
+    .scenery-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      pointer-events: none;
+    }
+
+    /* Mini barra HUD para conmutar elenco */
+    .hud-cast {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding-left: 8px;
+      border-left: 1px solid var(--border-subtle);
+    }
+
+    .cast-pill {
+      background: rgba(255, 255, 255, 0.04);
+      border: 1px solid var(--border-subtle);
+      border-radius: 6px;
+      padding: 5px 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      transition: all 0.2s ease;
+    }
+
+    .cast-pill:hover {
+      border-color: var(--border-highlight);
+      color: #fff;
+      background: rgba(255, 255, 255, 0.08);
+    }
+
+    .cast-pill.is-active {
+      background: rgba(34, 197, 94, 0.12);
+      border-color: rgba(34, 197, 94, 0.35);
+      color: #4ade80;
+    }
+
+    .cast-pill .pill-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: #475569;
+      transition: background 0.2s ease, box-shadow 0.2s ease;
+    }
+
+    .cast-pill.is-active .pill-dot {
+      background: #22c55e;
+      box-shadow: 0 0 6px #22c55e;
+    }
+
+    /* ==========================================================================
+       HUD / CONSOLA DE ILUMINACIÓN FLOTANTE (DISCRETA Y PROFESIONAL)
+       ========================================================================== */
+    .console-hud {
+      position: absolute;
+      top: 14px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: calc(100% - 32px);
+      max-width: 1220px;
+      background: rgba(15, 17, 23, 0.82);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border: 1px solid var(--border-subtle);
+      border-radius: 12px;
+      padding: 10px 18px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      z-index: 100;
+      box-shadow: 0 16px 36px rgba(0, 0, 0, 0.7), 0 0 1px rgba(255, 255, 255, 0.15);
+      transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.3s ease;
+    }
+
+    /* Cabecera / Identidad de la consola */
+    .hud-brand {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .brand-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, #1e222d 0%, #11131a 100%);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      border-radius: 8px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #f59e0b;
+      box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.15);
+    }
+
+    .brand-text h1 {
+      font-size: 13px;
+      font-weight: 700;
+      letter-spacing: 1.2px;
+      text-transform: uppercase;
+      color: #f8fafc;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .brand-badge {
+      font-size: 9px;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      background: rgba(245, 158, 11, 0.15);
+      color: #f59e0b;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+      letter-spacing: 0.5px;
+    }
+
+    .brand-text p {
+      font-size: 10px;
+      color: var(--text-muted);
+      font-family: 'JetBrains Mono', monospace;
+    }
+
+    /* Sección de Canales (CH 1, CH 2, CH 3) */
+    .hud-channels {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .channel-strip {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: rgba(8, 9, 13, 0.7);
+      border: 1px solid var(--border-subtle);
+      border-radius: 8px;
+      padding: 6px 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .channel-strip:hover {
+      border-color: var(--border-highlight);
+      background: rgba(22, 25, 35, 0.85);
+    }
+
+    .channel-strip:active {
+      transform: scale(0.97);
+    }
+
+    .channel-strip-led {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--color-standby-led);
+      transition: background 0.3s ease, box-shadow 0.3s ease;
+    }
+
+    .channel-strip.is-active .channel-strip-led {
+      background: var(--color-active-led);
+      box-shadow: 0 0 10px var(--color-active-led), 0 0 2px #fff;
+    }
+
+    .channel-strip-info {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .channel-strip-label {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      font-weight: 700;
+      color: #94a3b8;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .key-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 15px;
+      height: 15px;
+      padding: 0 3px;
+      border-radius: 3px;
+      background: rgba(255, 255, 255, 0.08);
+      color: #cbd5e1;
+      font-size: 9px;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+    }
+
+    .channel-strip-status {
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      font-weight: 700;
+      color: var(--text-muted);
+      letter-spacing: 0.5px;
+    }
+
+    .channel-strip.is-active .channel-strip-status {
+      color: #4ade80;
+    }
+
+    /* Botones Maestros: Blackout y Full On */
+    .hud-masters {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .master-btn {
+      appearance: none;
+      border: none;
+      outline: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 8px 14px;
+      border-radius: 8px;
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.8px;
+      text-transform: uppercase;
+      transition: all 0.15s ease;
+    }
+
+    .master-btn:active {
+      transform: scale(0.96);
+    }
+
+    /* Botón Blackout */
+    .btn-blackout {
+      background: linear-gradient(180deg, #2b1111 0%, #1a0808 100%);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.35);
+      box-shadow: 0 2px 8px rgba(239, 68, 68, 0.2);
+    }
+
+    .btn-blackout:hover {
+      background: linear-gradient(180deg, #3d1515 0%, #260a0a 100%);
+      border-color: rgba(239, 68, 68, 0.65);
+      color: #ffffff;
+      box-shadow: 0 0 14px rgba(239, 68, 68, 0.4);
+    }
+
+    /* Botón Full On */
+    .btn-fullon {
+      background: linear-gradient(180deg, #2e260e 0%, #1c1605 100%);
+      color: #fde047;
+      border: 1px solid rgba(234, 179, 8, 0.35);
+      box-shadow: 0 2px 8px rgba(234, 179, 8, 0.2);
+    }
+
+    .btn-fullon:hover {
+      background: linear-gradient(180deg, #3f3411 0%, #282006 100%);
+      border-color: rgba(234, 179, 8, 0.65);
+      color: #ffffff;
+      box-shadow: 0 0 14px rgba(234, 179, 8, 0.4);
+    }
+
+    /* Botón Vaciar Escenario */
+    .btn-clearstage {
+      background: linear-gradient(180deg, #1e1b2e 0%, #110e1c 100%);
+      color: #c4b5fd;
+      border: 1px solid rgba(167, 139, 250, 0.35);
+      box-shadow: 0 2px 8px rgba(139, 92, 246, 0.15);
+    }
+
+    .btn-clearstage:hover {
+      background: linear-gradient(180deg, #2e264a 0%, #1b162f 100%);
+      border-color: rgba(167, 139, 250, 0.65);
+      color: #ffffff;
+      box-shadow: 0 0 14px rgba(139, 92, 246, 0.35);
+    }
+
+    /* Indicador de Tiempos de Fade */
+    .hud-timings {
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      padding-left: 10px;
+      border-left: 1px solid var(--border-subtle);
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 9px;
+      color: var(--text-muted);
+    }
+
+    .timing-badge {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .timing-badge span.val {
+      font-weight: 700;
+      color: #e2e8f0;
+    }
+
+    /* Opciones adicionales: Geles y Ayuda */
+    .hud-tools {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .tool-btn {
+      background: rgba(255, 255, 255, 0.05);
+      border: 1px solid var(--border-subtle);
+      color: #94a3b8;
+      border-radius: 6px;
+      width: 28px;
+      height: 28px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .tool-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      color: #f8fafc;
+      border-color: var(--border-highlight);
+    }
+
+    /* Selector de Geles / Temperatura */
+    .gel-selector {
+      background: rgba(8, 9, 13, 0.8);
+      border: 1px solid var(--border-subtle);
+      color: #cbd5e1;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 10px;
+      border-radius: 6px;
+      padding: 5px 8px;
+      outline: none;
+      cursor: pointer;
+    }
+
+    .gel-selector:hover {
+      border-color: var(--border-highlight);
+    }
+
+    /* ==========================================================================
+       MODAL DE AYUDA Y ATAJOS DE TECLADO
+       ========================================================================== */
+    .help-modal {
+      position: absolute;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      z-index: 200;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.25s ease;
+    }
+
+    .help-modal.is-visible {
+      opacity: 1;
+      pointer-events: all;
+    }
+
+    .modal-card {
+      background: #12141a;
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      border-radius: 14px;
+      padding: 24px;
+      width: 90%;
+      max-width: 480px;
+      box-shadow: 0 25px 60px rgba(0, 0, 0, 0.9);
+    }
+
+    .modal-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 18px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+      padding-bottom: 12px;
+    }
+
+    .modal-header h2 {
+      font-size: 16px;
+      font-weight: 700;
+      color: #f8fafc;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: #94a3b8;
+      cursor: pointer;
+      font-size: 18px;
+    }
+
+    .modal-close:hover {
+      color: #fff;
+    }
+
+    .shortcut-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      margin-bottom: 20px;
+    }
+
+    .shortcut-table td {
+      padding: 8px 4px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+    }
+
+    .shortcut-table td:last-child {
+      text-align: right;
+    }
+
+    .key-tag {
+      display: inline-block;
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      border-radius: 4px;
+      padding: 3px 8px;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      color: #f1f5f9;
+    }
+
+    /* Notificación Toast flotante */
+    .toast-cue {
+      position: absolute;
+      bottom: 28px;
+      left: 50%;
+      transform: translateX(-50%) translateY(20px);
+      background: rgba(15, 23, 42, 0.9);
+      border: 1px solid rgba(255, 255, 255, 0.12);
+      color: #f1f5f9;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 11px;
+      padding: 7px 16px;
+      border-radius: 20px;
+      pointer-events: none;
+      opacity: 0;
+      transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+      z-index: 90;
+      box-shadow: 0 10px 25px rgba(0,0,0,0.6);
+    }
+
+    .toast-cue.is-active {
+      opacity: 1;
+      transform: translateX(-50%) translateY(0);
+    }
+
+    /* Responsive adjustments */
+    @media (max-width: 960px) {
+      .hud-cast {
+        display: none;
+      }
+      .scenery-col1, .scenery-col2, .scenery-col3 {
+        transform: translateX(-50%) scale(0.85);
+        transform-origin: 50% 100%;
+      }
+    }
+
+    @media (max-width: 820px) {
+      .hud-timings, .hud-tools {
+        display: none;
+      }
+      .console-hud {
+        padding: 8px 12px;
+      }
+      .master-btn {
+        padding: 6px 10px;
+        font-size: 10px;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .scenery-col1, .scenery-col2, .scenery-col3 {
+        transform: translateX(-50%) scale(0.68);
+        transform-origin: 50% 100%;
+      }
+    }
+  </style>
+</head>
+<body data-gel="warm">
+
+  <!-- ==========================================================================
+       CONSOLA / HUD SUPERIOR
+       ========================================================================== -->
+  <header class="console-hud" id="consoleHud">
+    <!-- Identidad de la consola -->
+    <div class="hud-brand">
+      <div class="brand-icon">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+      </div>
+      <div class="brand-text">
+        <h1>LUMEN-3000 <span class="brand-badge">CONSOLA</span></h1>
+        <p>SIMULADOR DE TRANSICIONES</p>
+      </div>
+    </div>
+
+    <!-- Indicadores y selectores de Canal -->
+    <div class="hud-channels">
+      <!-- Canal 1: Izquierda -->
+      <div class="channel-strip" id="stripCh1" data-ch="1" title="Alternar Canal 1 (Tecla 1)">
+        <div class="channel-strip-led"></div>
+        <div class="channel-strip-info">
+          <div class="channel-strip-label">
+            <span>CH 1</span>
+            <span class="key-badge">1</span>
+          </div>
+          <div class="channel-strip-status" id="statusCh1">OFF</div>
+        </div>
+      </div>
+
+      <!-- Canal 2: Centro -->
+      <div class="channel-strip" id="stripCh2" data-ch="2" title="Alternar Canal 2 (Tecla 2)">
+        <div class="channel-strip-led"></div>
+        <div class="channel-strip-info">
+          <div class="channel-strip-label">
+            <span>CH 2</span>
+            <span class="key-badge">2</span>
+          </div>
+          <div class="channel-strip-status" id="statusCh2">OFF</div>
+        </div>
+      </div>
+
+      <!-- Canal 3: Derecha -->
+      <div class="channel-strip" id="stripCh3" data-ch="3" title="Alternar Canal 3 (Tecla 3)">
+        <div class="channel-strip-led"></div>
+        <div class="channel-strip-info">
+          <div class="channel-strip-label">
+            <span>CH 3</span>
+            <span class="key-badge">3</span>
+          </div>
+          <div class="channel-strip-status" id="statusCh3">OFF</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Botones de Escena Magistral -->
+    <div class="hud-masters">
+      <!-- Blackout -->
+      <button class="master-btn btn-blackout" id="btnBlackout" title="Apagado General (Espacio o tecla 0)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M18.36 6.64a9 9 0 1 1-12.73 0"></path>
+          <line x1="12" y1="2" x2="12" y2="12"></line>
+        </svg>
+        <span>Blackout</span>
+        <span class="key-badge" style="background: rgba(0,0,0,0.3); border-color: rgba(239, 68, 68, 0.4);">0</span>
+      </button>
+
+      <!-- Full On -->
+      <button class="master-btn btn-fullon" id="btnFullOn" title="Encendido General (Tecla F)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+        </svg>
+        <span>Full On</span>
+        <span class="key-badge" style="background: rgba(0,0,0,0.3); border-color: rgba(234, 179, 8, 0.4);">F</span>
+      </button>
+
+      <!-- Vaciar Escenario -->
+      <button class="master-btn btn-clearstage" id="btnClearStage" title="Vaciar Escenario (Tecla V)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"></path>
+        </svg>
+        <span>Vaciar Escenario</span>
+        <span class="key-badge" style="background: rgba(0,0,0,0.3); border-color: rgba(167, 139, 250, 0.4);">V</span>
+      </button>
+    </div>
+
+    <!-- Elenco en Escena (Entradas y salidas) -->
+    <div class="hud-cast" id="hudCast" title="Control de Elenco y Marcaciones">
+      <button class="cast-pill" id="pillAbuelo" data-char="abuelo" title="Conmutar Abuelo (Tecla A)">
+        <span class="pill-dot"></span>
+        <span>Abuelo</span>
+        <span class="key-badge">A</span>
+      </button>
+      <button class="cast-pill" id="pillHija" data-char="hija" title="Conmutar Hija (Tecla H)">
+        <span class="pill-dot"></span>
+        <span>Hija</span>
+        <span class="key-badge">H</span>
+      </button>
+      <button class="cast-pill" id="pillNieta" data-char="nieta" title="Conmutar Nieta (Tecla N)">
+        <span class="pill-dot"></span>
+        <span>Nieta</span>
+        <span class="key-badge">N</span>
+      </button>
+      <button class="cast-pill" id="pillPresentador" data-char="presentador" title="Conmutar Presentador (Tecla P)">
+        <span class="pill-dot"></span>
+        <span>Presentador</span>
+        <span class="key-badge">P</span>
+      </button>
+    </div>
+
+    <!-- Tiempos de Fade Estrictos -->
+    <div class="hud-timings">
+      <div class="timing-badge">
+        <span>FADE IN:</span>
+        <span class="val">500ms</span>
+      </div>
+      <div class="timing-badge">
+        <span>FADE OUT:</span>
+        <span class="val">1000ms</span>
+      </div>
+    </div>
+
+    <!-- Herramientas adicionales: Temperatura de color y Ayuda -->
+    <div class="hud-tools">
+      <select class="gel-selector" id="gelSelector" title="Temperatura / Filtro de Gel Teatral">
+        <option value="warm">3200K Cálido</option>
+        <option value="neutral">4000K Neutro</option>
+        <option value="amber">Ámbar #02</option>
+        <option value="blue">Azul Escena #68</option>
+      </select>
+
+      <button class="tool-btn" id="btnSoundToggle" title="Sonido Dimmer / Relé (Conmutar)">
+        <svg id="soundIconOn" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+          <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+        </svg>
+        <svg id="soundIconOff" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="display: none;">
+          <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+          <line x1="23" y1="9" x2="17" y2="15"></line>
+          <line x1="17" y1="9" x2="23" y2="15"></line>
+        </svg>
+      </button>
+
+      <button class="tool-btn" id="btnHelp" title="Atajos de teclado y ayuda">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"></circle>
+          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"></path>
+          <line x1="12" y1="17" x2="12.01" y2="17"></line>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- ==========================================================================
+       ESCENARIO TEATRAL (100vh x 100vw)
+       ========================================================================== -->
+  <main class="theater-stage" id="stage">
+    <!-- Telón de fondo / Ciclorama -->
+    <div class="stage-backdrop"></div>
+
+    <!-- Catwalk / Barra superior de soporte (Rigging truss) -->
+    <div class="grid-rigging-bar">
+      <div class="rigging-truss-pattern"></div>
+    </div>
+
+    <!-- Partículas atmosféricas de polvo en suspensión -->
+    <canvas id="dust-canvas"></canvas>
+
+    <!-- Contenedor de las 3 Columnas Verticales -->
+    <div class="columns-container">
+      
+      <!-- COLUMNA 1: IZQUIERDA -->
+      <section class="stage-column" id="colCh1" data-ch="1" tabindex="0" role="button" aria-label="Canal 1: Izquierda">
+        <!-- Foco Cenital Teatral -->
+        <div class="spotlight-fixture">
+          <div class="fixture-clamp"></div>
+          <div class="fixture-yoke"></div>
+          <div class="fixture-housing">
+            <div class="fixture-fins"></div>
+            <div class="fixture-snout"></div>
+            <div class="fixture-lens">
+              <div class="fixture-lens-glow"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Haces volumétricos -->
+        <div class="beam-container">
+          <div class="channel-ambient-wash"></div>
+          <div class="channel-beam"></div>
+          <div class="channel-beam-core"></div>
+        </div>
+
+        <!-- Iluminación del suelo (Pool) -->
+        <div class="channel-floor-pool"></div>
+        <div class="channel-floor-hotspot"></div>
+        <div class="stage-spike-cross" title="Marca de actor (Spike mark)"></div>
+
+        <!-- Escenografía y Personajes de la Zona 1 (Habitación y Familia) -->
+        <div class="stage-scenery-group scenery-col1">
+          <!-- Personaje: Abuelo (Entrada/Salida Tecla A) -->
+          <div class="stage-character is-exited" id="charAbuelo" data-character="abuelo">
+            <div class="character-inner stage-element">
+              <svg class="svg-character svg-abuelo" viewBox="0 0 54 125" width="48" height="112" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="25" cy="122" rx="18" ry="3" fill="#000000" fill-opacity="0.55"/>
+                <path d="M38 60 C38 52, 44 52, 44 56 L44 122" stroke="#d97706" stroke-width="2.5" stroke-linecap="round"/>
+                <circle cx="41" cy="54" r="2.5" fill="#f59e0b"/>
+                <ellipse cx="20" cy="120" rx="6" ry="3" fill="#18181b"/>
+                <ellipse cx="30" cy="120" rx="6" ry="3" fill="#18181b"/>
+                <path d="M16 85 L18 119 L23 119 L25 85 Z" fill="#334155"/>
+                <path d="M26 85 L28 119 L33 119 L35 85 Z" fill="#2c3748"/>
+                <path d="M14 42 C14 36, 38 36, 38 42 L37 86 C37 88, 15 88, 15 86 Z" fill="#475569"/>
+                <path d="M20 42 L26 65 L32 42 Z" fill="#f8fafc"/>
+                <path d="M25 45 L25 58 L27 58 L27 45 Z" fill="#991b1b"/>
+                <path d="M20 62 L32 62 L31 85 L21 85 Z" fill="#334155"/>
+                <circle cx="26" cy="68" r="1" fill="#cbd5e1"/>
+                <circle cx="26" cy="74" r="1" fill="#cbd5e1"/>
+                <circle cx="26" cy="80" r="1" fill="#cbd5e1"/>
+                <path d="M36 44 L42 65 L39 70" stroke="#475569" stroke-width="4" stroke-linecap="round"/>
+                <circle cx="39" cy="70" r="3" fill="#fed7aa"/>
+                <path d="M15 44 L13 68 L15 72" stroke="#475569" stroke-width="4" stroke-linecap="round"/>
+                <rect x="23" y="34" width="6" height="6" fill="#fed7aa"/>
+                <ellipse cx="26" cy="26" rx="9" ry="10" fill="#fed7aa"/>
+                <path d="M17 25 C17 14, 35 14, 35 25 C35 20, 31 16, 26 16 C21 16, 17 20, 17 25 Z" fill="#e2e8f0"/>
+                <rect x="21" y="24" width="4" height="3" rx="1" fill="none" stroke="#ca8a04" stroke-width="0.8"/>
+                <rect x="27" y="24" width="4" height="3" rx="1" fill="none" stroke="#ca8a04" stroke-width="0.8"/>
+                <line x1="25" y1="25" x2="27" y2="25" stroke="#ca8a04" stroke-width="0.8"/>
+              </svg>
+              <div class="character-tag">Abuelo [A]</div>
+            </div>
+          </div>
+
+          <!-- Escenografía Fija: Cama -->
+          <div class="scenery-item stage-element" id="sceneryBed">
+            <svg class="svg-bed" viewBox="0 0 170 95" width="160" height="90" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <ellipse cx="85" cy="88" rx="72" ry="6" fill="#000000" fill-opacity="0.6"/>
+              <rect x="22" y="35" width="6" height="50" rx="2" fill="#26160e"/>
+              <rect x="142" y="35" width="6" height="50" rx="2" fill="#26160e"/>
+              <path d="M18 42 C18 20, 152 20, 152 42 L152 70 L18 70 Z" fill="#382014" stroke="#4a2c1d" stroke-width="2"/>
+              <path d="M28 42 C28 28, 142 28, 142 42 L142 66 L28 66 Z" fill="#2d190f" stroke="#a16207" stroke-width="1" stroke-opacity="0.5"/>
+              <circle cx="21" cy="22" r="4" fill="#ca8a04"/>
+              <circle cx="149" cy="22" r="4" fill="#ca8a04"/>
+              <rect x="34" y="44" width="46" height="18" rx="6" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="1"/>
+              <rect x="90" y="44" width="46" height="18" rx="6" fill="#e2e8f0" stroke="#cbd5e1" stroke-width="1"/>
+              <path d="M16 62 L154 62 L158 84 L12 84 Z" fill="#f1f5f9" stroke="#cbd5e1" stroke-width="1"/>
+              <path d="M12 68 C45 66, 125 66, 158 68 L158 84 L12 84 Z" fill="#e2e8f0"/>
+              <path d="M13 74 L157 74 L158 82 L12 82 Z" fill="#831843" fill-opacity="0.9"/>
+              <rect x="14" y="70" width="7" height="18" rx="2" fill="#26160e" stroke="#4a2c1d" stroke-width="1"/>
+              <rect x="149" y="70" width="7" height="18" rx="2" fill="#26160e" stroke="#4a2c1d" stroke-width="1"/>
+            </svg>
+            <div class="character-tag" style="opacity: 0.5;">Cama • Habitación</div>
+          </div>
+
+          <!-- Personaje: Hija (Entrada/Salida Tecla H) -->
+          <div class="stage-character is-exited" id="charHija" data-character="hija">
+            <div class="character-inner stage-element">
+              <svg class="svg-character svg-hija" viewBox="0 0 52 130" width="46" height="115" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="26" cy="127" rx="16" ry="3" fill="#000000" fill-opacity="0.55"/>
+                <ellipse cx="22" cy="125" rx="4" ry="2.5" fill="#09090b"/>
+                <ellipse cx="30" cy="125" rx="4" ry="2.5" fill="#09090b"/>
+                <path d="M19 46 L13 124 L39 124 L33 46 Z" fill="#1e3a5f"/>
+                <path d="M19 46 C21 38, 31 38, 33 46 L35 72 L17 72 Z" fill="#162b48"/>
+                <path d="M16 46 C22 62, 30 62, 36 46 L34 42 C28 40, 24 40, 18 42 Z" fill="#475569"/>
+                <path d="M18 48 L24 72 L26 72 L21 48" stroke="#162b48" stroke-width="3" stroke-linecap="round"/>
+                <path d="M34 48 L28 72 L26 72 L31 48" stroke="#162b48" stroke-width="3" stroke-linecap="round"/>
+                <ellipse cx="26" cy="72" rx="3.5" ry="3" fill="#fed7aa"/>
+                <rect x="23" y="32" width="6" height="7" fill="#fed7aa"/>
+                <ellipse cx="26" cy="24" rx="8" ry="9" fill="#fed7aa"/>
+                <path d="M18 22 C18 12, 34 12, 34 22 C34 14, 26 12, 26 12 C26 12, 18 14, 18 22 Z" fill="#27272a"/>
+                <circle cx="26" cy="12" r="4.5" fill="#18181b"/>
+                <circle cx="18" cy="26" r="1" fill="#fde047"/>
+              </svg>
+              <div class="character-tag">Hija [H]</div>
+            </div>
+          </div>
+
+          <!-- Personaje: Nieta (Entrada/Salida Tecla N) -->
+          <div class="stage-character is-exited" id="charNieta" data-character="nieta">
+            <div class="character-inner stage-element">
+              <svg class="svg-character svg-nieta" viewBox="0 0 46 100" width="40" height="88" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="23" cy="98" rx="14" ry="2.5" fill="#000000" fill-opacity="0.5"/>
+                <ellipse cx="19" cy="96" rx="4" ry="2" fill="#18181b"/>
+                <ellipse cx="27" cy="96" rx="4" ry="2" fill="#18181b"/>
+                <rect x="18" y="86" width="3" height="10" fill="#fbcfe8"/>
+                <rect x="25" y="86" width="3" height="10" fill="#fbcfe8"/>
+                <path d="M16 45 L10 88 L36 88 L30 45 Z" fill="#9f1239"/>
+                <path d="M18 45 C20 49, 23 49, 23 45" fill="#f8fafc" stroke="#f1f5f9" stroke-width="1.5"/>
+                <path d="M23 45 C23 49, 26 49, 28 45" fill="#f8fafc" stroke="#f1f5f9" stroke-width="1.5"/>
+                <path d="M16 46 L13 66" stroke="#9f1239" stroke-width="3" stroke-linecap="round"/>
+                <path d="M30 46 L33 66" stroke="#9f1239" stroke-width="3" stroke-linecap="round"/>
+                <circle cx="13" cy="67" r="2.5" fill="#fbcfe8"/>
+                <circle cx="33" cy="67" r="2.5" fill="#fbcfe8"/>
+                <rect x="20.5" y="32" width="5" height="6" fill="#fbcfe8"/>
+                <ellipse cx="23" cy="24" rx="7" ry="8" fill="#fed7aa"/>
+                <path d="M16 22 C16 14, 30 14, 30 22 C30 17, 27 15, 23 15 C19 15, 16 17, 16 22 Z" fill="#451a03"/>
+                <path d="M16 25 L14 42" stroke="#451a03" stroke-width="2.5" stroke-linecap="round"/>
+                <path d="M30 25 L32 42" stroke="#451a03" stroke-width="2.5" stroke-linecap="round"/>
+                <circle cx="14" cy="42" r="2" fill="#e11d48"/>
+                <circle cx="32" cy="42" r="2" fill="#e11d48"/>
+              </svg>
+              <div class="character-tag">Nieta [N]</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Indicador de zona & Tooltip de clic -->
+        <div class="column-click-hint">CLIC PARA ALTERNAR (1)</div>
+        <div class="column-zone-tag">ZONA 1 • IZQUIERDA</div>
+      </section>
+
+      <!-- COLUMNA 2: CENTRO -->
+      <section class="stage-column" id="colCh2" data-ch="2" tabindex="0" role="button" aria-label="Canal 2: Centro">
+        <!-- Foco Cenital Teatral -->
+        <div class="spotlight-fixture">
+          <div class="fixture-clamp"></div>
+          <div class="fixture-yoke"></div>
+          <div class="fixture-housing">
+            <div class="fixture-fins"></div>
+            <div class="fixture-snout"></div>
+            <div class="fixture-lens">
+              <div class="fixture-lens-glow"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Haces volumétricos -->
+        <div class="beam-container">
+          <div class="channel-ambient-wash"></div>
+          <div class="channel-beam"></div>
+          <div class="channel-beam-core"></div>
+        </div>
+
+        <!-- Iluminación del suelo (Pool) -->
+        <div class="channel-floor-pool"></div>
+        <div class="channel-floor-hotspot"></div>
+        <div class="stage-spike-cross" title="Marca de actor (Spike mark)"></div>
+
+        <!-- Escenografía y Personaje de la Zona 2 (Presentador) -->
+        <div class="stage-scenery-group scenery-col2">
+          <!-- Personaje: Presentador (Entrada/Salida Tecla P) -->
+          <div class="stage-character is-exited" id="charPresentador" data-character="presentador">
+            <div class="character-inner stage-element">
+              <svg class="svg-character svg-presentador" viewBox="0 0 65 145" width="58" height="130" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <ellipse cx="32" cy="142" rx="22" ry="3.5" fill="#000000" fill-opacity="0.6"/>
+                <ellipse cx="24" cy="140" rx="6" ry="3" fill="#09090b"/>
+                <ellipse cx="40" cy="140" rx="6" ry="3" fill="#09090b"/>
+                <path d="M20 78 L21 139 L27 139 L29 78 Z" fill="#0f172a"/>
+                <path d="M35 78 L37 139 L43 139 L44 78 Z" fill="#090e17"/>
+                <line x1="21" y1="80" x2="22" y2="138" stroke="#334155" stroke-width="0.8"/>
+                <line x1="43" y1="80" x2="42" y2="138" stroke="#334155" stroke-width="0.8"/>
+                <path d="M17 38 C17 32, 47 32, 47 38 L45 80 C45 83, 19 83, 19 80 Z" fill="#090e17"/>
+                <path d="M25 36 L32 64 L39 36 Z" fill="#f8fafc"/>
+                <polygon points="30,40 34,40 32,42" fill="#020617"/>
+                <polygon points="29,39 35,43 35,39 29,43" fill="#09090b"/>
+                <path d="M19 36 L26 62 L32 64 L25 36 Z" fill="#1e293b"/>
+                <path d="M45 36 L38 62 L32 64 L39 36 Z" fill="#1e293b"/>
+                <path d="M17 40 L11 68 L18 72" stroke="#090e17" stroke-width="4.5" stroke-linecap="round"/>
+                <circle cx="18" cy="72" r="3" fill="#fed7aa"/>
+                <rect x="16" y="62" width="4.5" height="10" rx="2" fill="#334155"/>
+                <ellipse cx="18.2" cy="62" rx="3.5" ry="4" fill="#94a3b8" stroke="#cbd5e1" stroke-width="0.8"/>
+                <path d="M18 74 C16 86, 20 95, 15 120" stroke="#1e293b" stroke-width="1.2" stroke-linecap="round" fill="none"/>
+                <path d="M47 40 L52 66 L47 72" stroke="#090e17" stroke-width="4.5" stroke-linecap="round"/>
+                <circle cx="47" cy="72" r="3" fill="#fed7aa"/>
+                <rect x="44" y="66" width="14" height="18" rx="1.5" transform="rotate(-10 44 66)" fill="#1c1917" stroke="#ca8a04" stroke-width="0.8"/>
+                <rect x="46" y="68" width="10" height="14" rx="1" transform="rotate(-10 46 68)" fill="#f8fafc"/>
+                <rect x="29" y="30" width="6" height="7" fill="#fed7aa"/>
+                <ellipse cx="32" cy="22" rx="8" ry="9" fill="#fed7aa"/>
+                <path d="M24 20 C24 11, 40 11, 40 20 C40 14, 34 12, 32 12 C28 12, 24 14, 24 20 Z" fill="#1c1917"/>
+              </svg>
+              <div class="character-tag">Presentador [P]</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Indicador de zona & Tooltip de clic -->
+        <div class="column-click-hint">CLIC PARA ALTERNAR (2)</div>
+        <div class="column-zone-tag">ZONA 2 • CENTRO</div>
+      </section>
+
+      <!-- COLUMNA 3: DERECHA -->
+      <section class="stage-column" id="colCh3" data-ch="3" tabindex="0" role="button" aria-label="Canal 3: Derecha">
+        <!-- Foco Cenital Teatral -->
+        <div class="spotlight-fixture">
+          <div class="fixture-clamp"></div>
+          <div class="fixture-yoke"></div>
+          <div class="fixture-housing">
+            <div class="fixture-fins"></div>
+            <div class="fixture-snout"></div>
+            <div class="fixture-lens">
+              <div class="fixture-lens-glow"></div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Haces volumétricos -->
+        <div class="beam-container">
+          <div class="channel-ambient-wash"></div>
+          <div class="channel-beam"></div>
+          <div class="channel-beam-core"></div>
+        </div>
+
+        <!-- Iluminación del suelo (Pool) -->
+        <div class="channel-floor-pool"></div>
+        <div class="channel-floor-hotspot"></div>
+        <div class="stage-spike-cross" title="Marca de actor (Spike mark)"></div>
+
+        <!-- Escenografía Fija de la Zona 3: Mesa con 4 Comensales -->
+        <div class="stage-scenery-group scenery-col3">
+          <div class="scenery-item stage-element" id="sceneryTableGroup">
+            <svg class="svg-table-group" viewBox="0 0 340 145" width="310" height="132" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <!-- Sombra general del conjunto en el suelo -->
+              <ellipse cx="170" cy="138" rx="145" ry="7" fill="#000000" fill-opacity="0.65"/>
+
+              <!-- SILLAS TRASERAS -->
+              <rect x="112" y="46" width="28" height="40" rx="3" fill="#21130b" stroke="#382014" stroke-width="1.5"/>
+              <rect x="200" y="46" width="28" height="40" rx="3" fill="#21130b" stroke="#382014" stroke-width="1.5"/>
+
+              <!-- COMENSAL 2 (POSTERIOR IZQUIERDA - Mirando al frente hacia el público) -->
+              <g class="diner-d2">
+                <ellipse cx="126" cy="35" rx="7" ry="8" fill="#fed7aa"/>
+                <path d="M120 33 C120 25, 132 25, 132 33 C132 28, 128 26, 126 26 C124 26, 120 28, 120 33 Z" fill="#334155"/>
+                <path d="M114 48 C114 44, 138 44, 138 48 L140 85 L112 85 Z" fill="#1e293b"/>
+                <path d="M122 46 L126 62 L130 46 Z" fill="#f8fafc"/>
+                <polygon points="124,50 128,50 126,52" fill="#991b1b"/>
+                <circle cx="116" cy="78" r="3" fill="#fed7aa"/>
+                <circle cx="136" cy="78" r="3" fill="#fed7aa"/>
+              </g>
+
+              <!-- COMENSAL 3 (POSTERIOR DERECHA - Mirando al frente hacia el público) -->
+              <g class="diner-d3">
+                <ellipse cx="214" cy="35" rx="7" ry="8" fill="#fed7aa"/>
+                <path d="M207 33 C207 24, 221 24, 221 33 C221 27, 217 25, 214 25 C211 25, 207 27, 207 33 Z" fill="#1c1917"/>
+                <circle cx="214" cy="24" r="3.5" fill="#18181b"/>
+                <path d="M202 48 C202 44, 226 44, 226 48 L228 85 L200 85 Z" fill="#831843"/>
+                <path d="M208 48 C211 58, 217 58, 220 48" stroke="#fde047" stroke-width="1" fill="none"/>
+                <circle cx="204" cy="78" r="3" fill="#fed7aa"/>
+                <circle cx="224" cy="78" r="3" fill="#fed7aa"/>
+              </g>
+
+              <!-- COMENSAL 1 (LATERAL IZQUIERDO - Perfil hacia la mesa y el público) -->
+              <g class="diner-d1">
+                <path d="M38 68 L48 68 L50 134 L40 134 Z" fill="#21130b" stroke="#382014" stroke-width="1"/>
+                <path d="M48 62 C48 55, 54 55, 54 62 L54 100 L46 100 Z" fill="#2d190f"/>
+                <ellipse cx="58" cy="52" rx="7" ry="8" fill="#fed7aa"/>
+                <path d="M53 50 C53 43, 64 43, 64 50 C64 45, 60 44, 58 44 C56 44, 53 45, 53 50 Z" fill="#475569"/>
+                <path d="M50 64 C50 60, 68 60, 68 64 L72 108 L48 108 Z" fill="#0f172a"/>
+                <path d="M52 105 L76 105 L78 135 L68 135 Z" fill="#1e293b"/>
+                <path d="M62 66 L74 80 L84 80" stroke="#0f172a" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+                <circle cx="84" cy="80" r="2.5" fill="#fed7aa"/>
+                <path d="M83 74 L87 74 L86 78 L84 78 Z" fill="#991b1b" stroke="#93c5fd" stroke-width="0.8"/>
+                <line x1="85" y1="78" x2="85" y2="82" stroke="#93c5fd" stroke-width="0.8"/>
+              </g>
+
+              <!-- COMENSAL 4 (LATERAL DERECHO - Perfil hacia la mesa y el público) -->
+              <g class="diner-d4">
+                <path d="M302 68 L292 68 L290 134 L300 134 Z" fill="#21130b" stroke="#382014" stroke-width="1"/>
+                <path d="M292 62 C292 55, 286 55, 286 62 L286 100 L294 100 Z" fill="#2d190f"/>
+                <ellipse cx="282" cy="52" rx="7" ry="8" fill="#fed7aa"/>
+                <path d="M287 50 C287 43, 276 43, 276 50 C276 45, 280 44, 282 44 C284 44, 287 45, 287 50 Z" fill="#713f12"/>
+                <path d="M290 64 C290 60, 272 60, 272 64 L268 108 L292 108 Z" fill="#1e3a5f"/>
+                <path d="M288 105 L264 105 L262 135 L272 135 Z" fill="#1e293b"/>
+                <path d="M278 66 L266 80 L256 80" stroke="#1e3a5f" stroke-width="3.5" stroke-linecap="round" fill="none"/>
+                <circle cx="256" cy="80" r="2.5" fill="#fed7aa"/>
+              </g>
+
+              <!-- MESA EN PERSPECTIVA (Frente despejado, mirando hacia el público) -->
+              <rect x="75" y="98" width="8" height="38" rx="2" fill="#26160e" stroke="#382014" stroke-width="1"/>
+              <rect x="257" y="98" width="8" height="38" rx="2" fill="#26160e" stroke="#382014" stroke-width="1"/>
+              <rect x="166" y="98" width="8" height="38" rx="2" fill="#1f110b"/>
+              <rect x="65" y="94" width="210" height="8" fill="#301a11"/>
+
+              <polygon points="55,95 285,95 275,82 65,82" fill="#422417" stroke="#5c3420" stroke-width="1.5"/>
+              <polygon points="95,95 245,95 238,82 102,82" fill="#f1f5f9" fill-opacity="0.9"/>
+              <polygon points="93,95 95,95 95,103 93,103" fill="#cbd5e1"/>
+              <polygon points="245,95 247,95 247,103 245,103" fill="#cbd5e1"/>
+
+              <!-- VAJILLA Y COPAS -->
+              <ellipse cx="88" cy="89" rx="9" ry="4" fill="#ffffff" stroke="#94a3b8" stroke-width="0.8"/>
+              <ellipse cx="134" cy="89" rx="11" ry="4.5" fill="#ffffff" stroke="#94a3b8" stroke-width="0.8"/>
+              <ellipse cx="206" cy="89" rx="11" ry="4.5" fill="#ffffff" stroke="#94a3b8" stroke-width="0.8"/>
+              <ellipse cx="252" cy="89" rx="9" ry="4" fill="#ffffff" stroke="#94a3b8" stroke-width="0.8"/>
+
+              <rect x="168" y="78" width="4" height="9" fill="#ca8a04"/>
+              <ellipse cx="170" cy="87" rx="8" ry="2.5" fill="#ca8a04"/>
+              <ellipse cx="170" cy="76" rx="2" ry="3" fill="#fef08a"/>
+              <circle cx="170" cy="76" r="4" fill="#f59e0b" fill-opacity="0.3"/>
+
+              <path d="M148 83 L152 83 L151 86 L149 86 Z" fill="#991b1b" stroke="#93c5fd" stroke-width="0.6"/>
+              <line x1="150" y1="86" x2="150" y2="89" stroke="#93c5fd" stroke-width="0.6"/>
+              <path d="M190 83 L194 83 L193 86 L191 86 Z" fill="#991b1b" stroke="#93c5fd" stroke-width="0.6"/>
+              <line x1="192" y1="86" x2="192" y2="89" stroke="#93c5fd" stroke-width="0.6"/>
+            </svg>
+            <div class="character-tag" style="opacity: 0.6;">Mesa con 4 Comensales • Escena Fija</div>
+          </div>
+        </div>
+
+        <!-- Indicador de zona & Tooltip de clic -->
+        <div class="column-click-hint">CLIC PARA ALTERNAR (3)</div>
+        <div class="column-zone-tag">ZONA 3 • DERECHA</div>
+      </section>
+
+    </div>
+
+    <!-- Suelo en perspectiva teatral -->
+    <div class="stage-floor-wrapper">
+      <div class="stage-floor"></div>
+    </div>
+
+    <!-- Proscenio frontal -->
+    <div class="stage-apron"></div>
+  </main>
+
+  <!-- Notificación Toast dinámica -->
+  <div class="toast-cue" id="toastCue">CUE: BLACKOUT ACTIVADO</div>
+
+  <!-- Modal de Atajos de Teclado -->
+  <div class="help-modal" id="helpModal">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2>Atajos de Consola Teatral</h2>
+        <button class="modal-close" id="btnModalClose">&times;</button>
+      </div>
+      <table class="shortcut-table">
+        <tr>
+          <td>Alternar Canal 1 (Izquierda)</td>
+          <td><span class="key-tag">1</span> o Clic en Columna 1</td>
+        </tr>
+        <tr>
+          <td>Alternar Canal 2 (Centro)</td>
+          <td><span class="key-tag">2</span> o Clic en Columna 2</td>
+        </tr>
+        <tr>
+          <td>Alternar Canal 3 (Derecha)</td>
+          <td><span class="key-tag">3</span> o Clic en Columna 3</td>
+        </tr>
+        <tr>
+          <td>Blackout (Apagado general)</td>
+          <td><span class="key-tag">Espacio</span> o <span class="key-tag">0</span></td>
+        </tr>
+        <tr>
+          <td>Full On (Encendido general)</td>
+          <td><span class="key-tag">F</span></td>
+        </tr>
+        <tr>
+          <td>Vaciar Escenario (Retirar elenco)</td>
+          <td><span class="key-tag">V</span></td>
+        </tr>
+        <tr>
+          <td colspan="2" style="font-weight: 700; color: #94a3b8; padding-top: 10px; border-bottom: 1px solid rgba(255,255,255,0.1);">Entradas y Salidas de Elenco (Zona 1 y 2)</td>
+        </tr>
+        <tr>
+          <td>Entrada / Salida: Abuelo (Zona 1)</td>
+          <td><span class="key-tag">A</span></td>
+        </tr>
+        <tr>
+          <td>Entrada / Salida: Hija (Zona 1)</td>
+          <td><span class="key-tag">H</span></td>
+        </tr>
+        <tr>
+          <td>Entrada / Salida: Nieta (Zona 1)</td>
+          <td><span class="key-tag">N</span></td>
+        </tr>
+        <tr>
+          <td>Entrada / Salida: Presentador (Zona 2)</td>
+          <td><span class="key-tag">P</span></td>
+        </tr>
+        <tr>
+          <td>Cerrar esta ventana</td>
+          <td><span class="key-tag">Esc</span></td>
+        </tr>
+      </table>
+      <div style="font-size: 11px; color: var(--text-muted); line-height: 1.5;">
+        <strong style="color: #cbd5e1;">Tiempos de Transición Dinámicos:</strong><br>
+        • Fade In (Encendido): <strong>500 ms</strong> (0.5s ease-out)<br>
+        • Fade Out (Apagado): <strong>1000 ms</strong> (1.0s ease-in-out)
+      </div>
+    </div>
+  </div>
+
+  <!-- ==========================================================================
+       LÓGICA JAVASCRIPT
+       ========================================================================== -->
+  <script>
+    /**
+     * SIMULADOR DE CONSOLA TEATRAL (LUMEN-3000)
+     * Arquitectura limpia con estado desacoplado, síntesis de audio WebAudio y partículas.
+     */
+    (function () {
+      'use strict';
+
+      // Estado de los canales de iluminación y elenco en escena
+      const state = {
+        channels: {
+          1: false,
+          2: false,
+          3: false
+        },
+        characters: {
+          abuelo: false,
+          hija: false,
+          nieta: false,
+          presentador: false
+        },
+        soundEnabled: true
+      };
+
+      // Referencias DOM
+      const dom = {
+        body: document.body,
+        columns: {
+          1: document.getElementById('colCh1'),
+          2: document.getElementById('colCh2'),
+          3: document.getElementById('colCh3')
+        },
+        strips: {
+          1: document.getElementById('stripCh1'),
+          2: document.getElementById('stripCh2'),
+          3: document.getElementById('stripCh3')
+        },
+        statusTexts: {
+          1: document.getElementById('statusCh1'),
+          2: document.getElementById('statusCh2'),
+          3: document.getElementById('statusCh3')
+        },
+        chars: {
+          abuelo: document.getElementById('charAbuelo'),
+          hija: document.getElementById('charHija'),
+          nieta: document.getElementById('charNieta'),
+          presentador: document.getElementById('charPresentador')
+        },
+        pills: {
+          abuelo: document.getElementById('pillAbuelo'),
+          hija: document.getElementById('pillHija'),
+          nieta: document.getElementById('pillNieta'),
+          presentador: document.getElementById('pillPresentador')
+        },
+        btnBlackout: document.getElementById('btnBlackout'),
+        btnFullOn: document.getElementById('btnFullOn'),
+        btnClearStage: document.getElementById('btnClearStage'),
+        gelSelector: document.getElementById('gelSelector'),
+        btnSoundToggle: document.getElementById('btnSoundToggle'),
+        soundIconOn: document.getElementById('soundIconOn'),
+        soundIconOff: document.getElementById('soundIconOff'),
+        btnHelp: document.getElementById('btnHelp'),
+        helpModal: document.getElementById('helpModal'),
+        btnModalClose: document.getElementById('btnModalClose'),
+        toastCue: document.getElementById('toastCue'),
+        canvas: document.getElementById('dust-canvas')
+      };
+
+      let toastTimer = null;
+
+      // ========================================================================
+      // SÍNTESIS DE AUDIO WEB AUDIO API (EFECTO RELÉ / CONTROLLER REALISTA)
+      // ========================================================================
+      let audioCtx = null;
+
+      function getAudioContext() {
+        if (!audioCtx) {
+          const AudioContext = window.AudioContext || window.webkitAudioContext;
+          if (AudioContext) {
+            audioCtx = new AudioContext();
+          }
+        }
+        if (audioCtx && audioCtx.state === 'suspended') {
+          audioCtx.resume();
+        }
+        return audioCtx;
+      }
+
+      function playRelayClick(isOn) {
+        if (!state.soundEnabled) return;
+        try {
+          const ctx = getAudioContext();
+          if (!ctx) return;
+
+          const now = ctx.currentTime;
+          
+          // Contacto mecánico del relé (Thump sutil de baja frecuencia)
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          
+          osc.type = isOn ? 'sine' : 'triangle';
+          osc.frequency.setValueAtTime(isOn ? 140 : 100, now);
+          osc.frequency.exponentialRampToValueAtTime(30, now + 0.04);
+          
+          gain.gain.setValueAtTime(0.12, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.05);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+
+          osc.start(now);
+          osc.stop(now + 0.05);
+
+          // Clic agudo del obturador / contactor
+          const clickOsc = ctx.createOscillator();
+          const clickGain = ctx.createGain();
+          clickOsc.type = 'square';
+          clickOsc.frequency.setValueAtTime(isOn ? 2400 : 1600, now);
+          clickOsc.frequency.exponentialRampToValueAtTime(400, now + 0.015);
+
+          clickGain.gain.setValueAtTime(0.04, now);
+          clickGain.gain.exponentialRampToValueAtTime(0.0001, now + 0.018);
+
+          clickOsc.connect(clickGain);
+          clickGain.connect(ctx.destination);
+
+          clickOsc.start(now);
+          clickOsc.stop(now + 0.02);
+
+        } catch (e) {
+          // Audio silencioso si el navegador bloquea autoplay
+        }
+      }
+
+      function playCharacterCueSound(isEntering) {
+        if (!state.soundEnabled) return;
+        try {
+          const ctx = getAudioContext();
+          if (!ctx) return;
+          const now = ctx.currentTime;
+          
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(isEntering ? 180 : 130, now);
+          osc.frequency.exponentialRampToValueAtTime(50, now + 0.06);
+
+          gain.gain.setValueAtTime(0.05, now);
+          gain.gain.exponentialRampToValueAtTime(0.001, now + 0.07);
+
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(now);
+          osc.stop(now + 0.07);
+        } catch (e) {}
+      }
+
+      // ========================================================================
+      // ACTUALIZACIÓN DE ESTADO E INTERFAZ
+      // ========================================================================
+
+      /**
+       * Muestra una notificación breve del Cue en ejecución
+       */
+      function showToast(message) {
+        if (toastTimer) clearTimeout(toastTimer);
+        dom.toastCue.textContent = message;
+        dom.toastCue.classList.add('is-active');
+        toastTimer = setTimeout(() => {
+          dom.toastCue.classList.remove('is-active');
+        }, 1600);
+      }
+
+      /**
+       * Actualiza la representación visual de un canal
+       */
+      function updateChannelUI(channelId) {
+        const isOn = state.channels[channelId];
+        const col = dom.columns[channelId];
+        const strip = dom.strips[channelId];
+        const statusText = dom.statusTexts[channelId];
+
+        if (isOn) {
+          col.classList.add('is-on');
+          strip.classList.add('is-active');
+          statusText.textContent = 'ON';
+          col.setAttribute('aria-pressed', 'true');
+        } else {
+          col.classList.remove('is-on');
+          strip.classList.remove('is-active');
+          statusText.textContent = 'OFF';
+          col.setAttribute('aria-pressed', 'false');
+        }
+      }
+
+      /**
+       * Alterna el estado de un canal
+       */
+      function toggleChannel(channelId) {
+        const targetState = !state.channels[channelId];
+        setChannel(channelId, targetState);
+      }
+
+      /**
+       * Establece explícitamente el estado de un canal
+       */
+      function setChannel(channelId, boolState) {
+        if (state.channels[channelId] === boolState) return;
+
+        state.channels[channelId] = boolState;
+        updateChannelUI(channelId);
+        playRelayClick(boolState);
+
+        const channelNames = { 1: 'IZQUIERDA', 2: 'CENTRO', 3: 'DERECHA' };
+        const actionName = boolState ? 'ON [0.5s]' : 'OFF [1.0s]';
+        showToast(`CH ${channelId} (${channelNames[channelId]}): ${actionName}`);
+      }
+
+      /**
+       * Blackout general: apaga todas las luces con fade out de 1.0s
+       */
+      function blackout() {
+        const anyOn = Object.values(state.channels).some(Boolean);
+        if (!anyOn) {
+          showToast('BLACKOUT: TODOS LOS CANALES YA ESTÁN EN OFF');
+          return;
+        }
+
+        [1, 2, 3].forEach(ch => {
+          if (state.channels[ch]) {
+            state.channels[ch] = false;
+            updateChannelUI(ch);
+          }
+        });
+
+        playRelayClick(false);
+        showToast('BLACKOUT: TODOS LOS CANALES EN FADE OUT [1.0s]');
+      }
+
+      /**
+       * Full On: enciende los tres canales con fade in de 500ms
+       */
+      function fullOn() {
+        const allOn = Object.values(state.channels).every(Boolean);
+        if (allOn) {
+          showToast('FULL ON: TODOS LOS CANALES YA ESTÁN EN ON');
+          return;
+        }
+
+        [1, 2, 3].forEach(ch => {
+          if (!state.channels[ch]) {
+            state.channels[ch] = true;
+            updateChannelUI(ch);
+          }
+        });
+
+        playRelayClick(true);
+        showToast('FULL ON: 3 CANALES ENCENDIDOS EN FADE IN [0.5s]');
+      }
+
+      /**
+       * Alterna la presencia (entrada/salida) de un personaje en escena
+       */
+      function toggleCharacter(charKey) {
+        const metadata = {
+          abuelo: { name: 'ABUELO', key: 'A', zona: 'ZONA 1' },
+          hija: { name: 'HIJA', key: 'H', zona: 'ZONA 1' },
+          nieta: { name: 'NIETA', key: 'N', zona: 'ZONA 1' },
+          presentador: { name: 'PRESENTADOR', key: 'P', zona: 'ZONA 2' }
+        };
+
+        const meta = metadata[charKey];
+        if (!meta) return;
+
+        state.characters[charKey] = !state.characters[charKey];
+        const isPresent = state.characters[charKey];
+
+        const charEl = dom.chars[charKey];
+        const pillEl = dom.pills[charKey];
+
+        if (charEl) {
+          if (isPresent) {
+            charEl.classList.remove('is-exited');
+          } else {
+            charEl.classList.add('is-exited');
+          }
+        }
+
+        if (pillEl) {
+          if (isPresent) {
+            pillEl.classList.add('is-active');
+          } else {
+            pillEl.classList.remove('is-active');
+          }
+          flashButton(pillEl);
+        }
+
+        playCharacterCueSound(isPresent);
+
+        const actionText = isPresent ? 'ENTRA' : 'SALE';
+        showToast(`ESCENA: ${meta.name} ${actionText}`);
+      }
+
+      /**
+       * Vaciar Escenario: retira de escena a todos los personajes activos
+       */
+      function clearStage() {
+        Object.keys(state.characters).forEach(charKey => {
+          state.characters[charKey] = false;
+          const charEl = dom.chars[charKey];
+          const pillEl = dom.pills[charKey];
+          if (charEl) {
+            charEl.classList.add('is-exited');
+          }
+          if (pillEl) {
+            pillEl.classList.remove('is-active');
+          }
+        });
+
+        playCharacterCueSound(false);
+        showToast('ESCENA: ESCENARIO VACIADO');
+      }
+
+      // ========================================================================
+      // GESTIÓN DE EVENTOS DE ENTRADA (CLIC Y TECLADO)
+      // ========================================================================
+
+      // Conmutar personajes desde los botones del HUD
+      Object.keys(dom.pills).forEach(charKey => {
+        const pill = dom.pills[charKey];
+        if (pill) {
+          pill.addEventListener('click', (e) => {
+            e.stopPropagation();
+            toggleCharacter(charKey);
+          });
+        }
+      });
+
+      // Clics directos en cada una de las 3 columnas
+      [1, 2, 3].forEach(ch => {
+        const col = dom.columns[ch];
+        col.addEventListener('click', (e) => {
+          // Asegurarse de que el clic no proviene de controles flotantes
+          toggleChannel(ch);
+        });
+
+        col.addEventListener('keydown', (e) => {
+          if (e.key === 'Enter' || e.key === ' ') {
+            e.preventDefault();
+            toggleChannel(ch);
+          }
+        });
+
+        // Clic en la tira de la consola superior
+        const strip = dom.strips[ch];
+        strip.addEventListener('click', (e) => {
+          e.stopPropagation();
+          toggleChannel(ch);
+        });
+      });
+
+      // Botón Blackout
+      dom.btnBlackout.addEventListener('click', (e) => {
+        e.stopPropagation();
+        blackout();
+      });
+
+      // Botón Full On
+      dom.btnFullOn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        fullOn();
+      });
+
+      // Botón Vaciar Escenario
+      dom.btnClearStage.addEventListener('click', (e) => {
+        e.stopPropagation();
+        clearStage();
+        flashButton(dom.btnClearStage);
+      });
+
+      // Selector de Filtros de Gel Teatral
+      dom.gelSelector.addEventListener('change', (e) => {
+        dom.body.setAttribute('data-gel', e.target.value);
+        showToast(`FILTRO GEL: ${e.target.options[e.target.selectedIndex].text}`);
+      });
+
+      // Conmutar sonido
+      dom.btnSoundToggle.addEventListener('click', () => {
+        state.soundEnabled = !state.soundEnabled;
+        dom.soundIconOn.style.display = state.soundEnabled ? 'block' : 'none';
+        dom.soundIconOff.style.display = state.soundEnabled ? 'none' : 'block';
+        showToast(`SONIDO DE RELÉ: ${state.soundEnabled ? 'ACTIVADO' : 'SILENCIADO'}`);
+      });
+
+      // Modal de Ayuda
+      dom.btnHelp.addEventListener('click', () => {
+        dom.helpModal.classList.add('is-visible');
+      });
+
+      dom.btnModalClose.addEventListener('click', () => {
+        dom.helpModal.classList.remove('is-visible');
+      });
+
+      dom.helpModal.addEventListener('click', (e) => {
+        if (e.target === dom.helpModal) {
+          dom.helpModal.classList.remove('is-visible');
+        }
+      });
+
+      // Atajos de teclado globales
+      window.addEventListener('keydown', (e) => {
+        // Evitar interceptar si se estuviera en un input o selector
+        if (['INPUT', 'SELECT', 'TEXTAREA'].includes(document.activeElement.tagName) && e.key !== 'Escape') {
+          return;
+        }
+
+        const key = e.key;
+        const code = e.code;
+
+        if (key === '1' || code === 'Numpad1') {
+          e.preventDefault();
+          toggleChannel(1);
+          flashButton(dom.strips[1]);
+        } else if (key === '2' || code === 'Numpad2') {
+          e.preventDefault();
+          toggleChannel(2);
+          flashButton(dom.strips[2]);
+        } else if (key === '3' || code === 'Numpad3') {
+          e.preventDefault();
+          toggleChannel(3);
+          flashButton(dom.strips[3]);
+        } else if (key === ' ' || key === '0' || key === 'b' || key === 'B' || code === 'Numpad0') {
+          e.preventDefault();
+          blackout();
+          flashButton(dom.btnBlackout);
+        } else if (key === 'f' || key === 'F') {
+          e.preventDefault();
+          fullOn();
+          flashButton(dom.btnFullOn);
+        } else if (key === 'a' || key === 'A') {
+          e.preventDefault();
+          toggleCharacter('abuelo');
+        } else if (key === 'h' || key === 'H') {
+          e.preventDefault();
+          toggleCharacter('hija');
+        } else if (key === 'n' || key === 'N') {
+          e.preventDefault();
+          toggleCharacter('nieta');
+        } else if (key === 'p' || key === 'P') {
+          e.preventDefault();
+          toggleCharacter('presentador');
+        } else if (key === 'v' || key === 'V') {
+          e.preventDefault();
+          clearStage();
+          flashButton(dom.btnClearStage);
+        } else if (key === 'Escape') {
+          dom.helpModal.classList.remove('is-visible');
+        }
+      });
+
+      function flashButton(btnElement) {
+        if (!btnElement) return;
+        btnElement.style.transform = 'scale(0.95)';
+        setTimeout(() => {
+          btnElement.style.transform = '';
+        }, 120);
+      }
+
+      // ========================================================================
+      // MOTOR DE PARTÍCULAS ATMOSFÉRICAS (POLVO EN SUSPENSIÓN TEATRAL)
+      // ========================================================================
+      const ctx = dom.canvas.getContext('2d');
+      let width = 0;
+      let height = 0;
+      const particles = [];
+      const PARTICLE_COUNT = 55;
+
+      // Intensidad lumínica suavizada de cada columna para las partículas (0 a 1)
+      const smoothedIntensity = { 1: 0, 2: 0, 3: 0 };
+
+      function resizeCanvas() {
+        width = dom.canvas.width = window.innerWidth;
+        height = dom.canvas.height = window.innerHeight;
+      }
+      window.addEventListener('resize', resizeCanvas);
+      resizeCanvas();
+
+      // Inicializar partículas
+      for (let i = 0; i < PARTICLE_COUNT; i++) {
+        particles.push({
+          x: Math.random() * width,
+          y: Math.random() * height,
+          radius: Math.random() * 1.8 + 0.6,
+          baseAlpha: Math.random() * 0.4 + 0.1,
+          vx: (Math.random() - 0.5) * 0.25,
+          vy: Math.random() * 0.35 + 0.1,
+          phase: Math.random() * Math.PI * 2
+        });
+      }
+
+      let lastTime = performance.now();
+
+      function animateParticles(currentTime) {
+        const delta = Math.min((currentTime - lastTime) / 1000, 0.1);
+        lastTime = currentTime;
+
+        // Suavizar intensidades de luz según los tiempos de transición
+        // Encendido (0.5s): velocidad ~2.0/s
+        // Apagado (1.0s): velocidad ~1.0/s
+        [1, 2, 3].forEach(ch => {
+          const target = state.channels[ch] ? 1.0 : 0.0;
+          const speed = state.channels[ch] ? 2.0 : 1.0;
+          if (smoothedIntensity[ch] < target) {
+            smoothedIntensity[ch] = Math.min(target, smoothedIntensity[ch] + speed * delta);
+          } else if (smoothedIntensity[ch] > target) {
+            smoothedIntensity[ch] = Math.max(target, smoothedIntensity[ch] - speed * delta);
+          }
+        });
+
+        ctx.clearRect(0, 0, width, height);
+
+        const colWidth = width / 3;
+
+        // Dibujar y actualizar motas de polvo
+        for (let i = 0; i < PARTICLE_COUNT; i++) {
+          const p = particles[i];
+
+          // Movimiento orgánico flotante
+          p.x += p.vx + Math.sin(currentTime * 0.001 + p.phase) * 0.2;
+          p.y += p.vy;
+
+          if (p.y > height) {
+            p.y = 50;
+            p.x = Math.random() * width;
+          }
+          if (p.x < 0) p.x = width;
+          if (p.x > width) p.x = 0;
+
+          // Determinar qué columna ocupa la partícula
+          const colIndex = Math.min(3, Math.max(1, Math.floor(p.x / colWidth) + 1));
+          const colLight = smoothedIntensity[colIndex];
+
+          // Las partículas solo brillan intensamente cuando el haz de su columna está activo
+          const illuminatedAlpha = p.baseAlpha * 0.15 + (colLight * 0.75);
+
+          if (illuminatedAlpha > 0.05) {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, p.radius * (1 + colLight * 0.5), 0, Math.PI * 2);
+            ctx.fillStyle = `rgba(255, 248, 220, ${illuminatedAlpha})`;
+            ctx.fill();
+          }
+        }
+
+        requestAnimationFrame(animateParticles);
+      }
+
+      requestAnimationFrame(animateParticles);
+
+    })();
+  </script>
+</body>
+</html>
